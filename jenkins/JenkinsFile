@@ -1,0 +1,27 @@
+pipeline {
+    agent any
+
+    triggers {
+        githubPush()
+    }
+
+    stages {
+        stage('Build') {
+            steps {
+                echo 'Built Successfully..!'
+            }
+        }
+
+        stage('Test') {
+            steps {
+                echo 'Test completed successfully...'
+            }
+        }
+
+        stage('Date') {
+            steps {
+                sh 'date'
+            }
+        }
+    }
+}
