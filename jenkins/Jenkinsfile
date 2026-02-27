@@ -1,28 +1,22 @@
 pipeline {
-  agent any
-  stages {
-
-    stage('Test') {
-      steps {pipeline {
     agent any
 
     environment {
         IMAGE_NAME = "simple-python-app"
+    }
 
     stages {
 
-        stage('Build Docker Image') 
+        stage('Checkout Code') {
             steps {
-                sh '''
-                  docker build -t $IMAGE_NAME:latest .
-                '''
+                checkout scm
             }
         }
 
         stage('Login to Docker Hub') {
             steps {
                 withCredentials([usernamePassword(
-                    credentialsI: 'docker-creds',
+                    credentialsId: 'dockerhub-creds',
                     usernameVariable: 'DOCKER_USER',
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
@@ -34,68 +28,23 @@ pipeline {
             }
         }
 
-        stage('Push Image') {
+        stage('Build Docker Image') {
             steps {
                 sh '''
-                  docker tag $IMAGE_NAME:latest \
-                    $DOCKER_USER/$IMAGE_NAME:latest
-
-                  docker push $DOCKER_USER/$IMAGE_NAME:latest
+                  docker build -t $IMAGE_NAME .
                 '''
             }
         }
 
-        stage('Deploy Application') {
+        stage('Run Container') {
             steps {
                 sh '''
-                  docker stop simple-python-app || true
-                  docker rm simple-python-app || true
-
-                  docker run -d \
-                    --name simple-python-app \
-                    -p 80:5000 \
-                    $DOCKER_USER/$IMAGE_NAME:latest
+                  docker stop $IMAGE_NAME || true
+                  docker rm $IMAGE_NAME || true
+                  docker run -d -p 80:5000 \
+                    --name $IMAGE_NAME $IMAGE_NAME
                 '''
             }
         }
     }
-}
-        sh 'pip install -r requirements.txt'
-      }
-    }
-
-    stage('Build Image') {
-      steps {
-        sh 'docker build -t  .'
-      }
-    }
-
-    stage('Push Image') {
-      steps {
-        withCredentials([usernamePassword(
-          credentialsId: 'dockerhub-creds',
-          usernameVariable: 'USER',
-          passwordVariable: 'PASS'
-        )]) {
-          sh '''
-            echo $PASS | docker login -u $USER --password-stdin
-            docker tag simple-python-app $USER/simple-python-app
-            docker push $USER/simple-python-app
-          '''
-        }
-      }
-    }
-
-    stage('Deploy') {
-      steps {
-        sh '''
-          docker pull $USER/simple-python-app
-          docker stop app || true
-          docker rm app || true
-          docker run -d -p 80:5000 --name app $USER/simple-python-app
-        '''
-      }
-    }
-  }
-
 }
