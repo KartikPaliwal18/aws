@@ -7,6 +7,7 @@ WORKDIR /app
 # Copy the requirements file
 COPY requirements.txt .
 
+#adding comment just to test my pipeline
 # Install the project dependencies
 RUN pip install -r requirements.txt
 
