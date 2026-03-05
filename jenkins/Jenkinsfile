@@ -2,8 +2,6 @@ pipeline {
     agent any
 
     environment {
-        // Replace 'your-username' if you want a fallback, 
-        // but we'll extract it from credentials below.
         IMAGE_NAME = "simple-python-app"
     }
 
@@ -14,7 +12,7 @@ pipeline {
             }
         }
 
-        stage('Build & Push to Docker Hub') {
+        stage('Build, Push & Run') {
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'dockerhub-creds',
@@ -22,33 +20,25 @@ pipeline {
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
                     sh """
-                        # Login
+                        # 1. Login
                         echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
                         
-                        # Build and Tag using the username from credentials
+                        # 2. Build and Push (This worked in your logs!)
                         docker build -t $DOCKER_USER/$IMAGE_NAME:${env.BUILD_NUMBER} .
                         docker tag $DOCKER_USER/$IMAGE_NAME:${env.BUILD_NUMBER} $DOCKER_USER/$IMAGE_NAME:latest
-                        
-                        # Push both tags
                         docker push $DOCKER_USER/$IMAGE_NAME:${env.BUILD_NUMBER}
                         docker push $DOCKER_USER/$IMAGE_NAME:latest
+                        
+                        # 3. Run Locally (Fix: Use DOCKER_USER while inside this block)
+                        docker stop $IMAGE_NAME || true
+                        docker rm $IMAGE_NAME || true
+                        docker run -d -p 80:5000 --name $IMAGE_NAME $DOCKER_USER/$IMAGE_NAME:latest
                     """
                 }
             }
         }
-
-        stage('Run Container Locally') {
-            steps {
-                // Using '|| true' ensures the pipeline doesn't fail if the container doesn't exist yet
-                sh """
-                    docker stop $IMAGE_NAME || true
-                    docker rm $IMAGE_NAME || true
-                    docker run -d -p 80:5000 --name $IMAGE_NAME $DOCKER_USER/$IMAGE_NAME:latest
-                """
-            }
-        }
     }
-    
+
     post {
         always {
             sh "docker logout"
