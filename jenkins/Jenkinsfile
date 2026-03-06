@@ -1,18 +1,51 @@
 pipeline {
-    agent any
+    // 1. Tell Jenkins NOT to pick a default machine
+    agent none 
 
     environment {
         IMAGE_NAME = "simple-python-app"
     }
 
     stages {
-        stage('Checkout Code') {
+        // --------------------------------------------------------
+        // STAGE 1: Runs ONLY on the Jenkins Master
+        // --------------------------------------------------------
+        stage('Build & Push') {
+            // 'built-in' is the modern Jenkins name for the Master node. 
+            // (If you are on a very old version, this might be 'master')
+            agent { label 'built-in' } 
+            
             steps {
                 checkout scm
+                
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-creds',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    sh """
+                        # Master builds the image using its own CPU
+                        echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+                        
+                        docker build -t $DOCKER_USER/$IMAGE_NAME:${env.BUILD_NUMBER} .
+                        docker tag $DOCKER_USER/$IMAGE_NAME:${env.BUILD_NUMBER} $DOCKER_USER/$IMAGE_NAME:latest
+                        
+                        # Master pushes the finished image up to DockerHub
+                        docker push $DOCKER_USER/$IMAGE_NAME:${env.BUILD_NUMBER}
+                        docker push $DOCKER_USER/$IMAGE_NAME:latest
+                        docker logout
+                    """
+                }
             }
         }
 
-        stage('Build, Push & Run') {
+        // --------------------------------------------------------
+        // STAGE 2: Runs ONLY on the Muscle Node
+        // --------------------------------------------------------
+        stage('Deploy') {
+            // Replace this with the exact name of your new node
+            agent { label 'jenkins-agent' } 
+            
             steps {
                 withCredentials([usernamePassword(
                     credentialsId: 'dockerhub-creds',
@@ -20,28 +53,21 @@ pipeline {
                     passwordVariable: 'DOCKER_PASS'
                 )]) {
                     sh """
-                        # 1. Login
+                        # Muscle logs into DockerHub
                         echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
                         
-                        # 2. Build and Push (This worked in your logs!)
-                        docker build -t $DOCKER_USER/$IMAGE_NAME:${env.BUILD_NUMBER} .
-                        docker tag $DOCKER_USER/$IMAGE_NAME:${env.BUILD_NUMBER} $DOCKER_USER/$IMAGE_NAME:latest
-                        docker push $DOCKER_USER/$IMAGE_NAME:${env.BUILD_NUMBER}
-                        docker push $DOCKER_USER/$IMAGE_NAME:latest
-                        
-                        # 3. Run Locally (Fix: Use DOCKER_USER while inside this block)
+                        # Muscle pulls the finished image the Master just uploaded
+                        docker pull $DOCKER_USER/$IMAGE_NAME:latest
+
+                        # Muscle stops the old app and runs the new one
                         docker stop $IMAGE_NAME || true
                         docker rm $IMAGE_NAME || true
                         docker run -d -p 80:5000 --name $IMAGE_NAME $DOCKER_USER/$IMAGE_NAME:latest
+                        
+                        docker logout
                     """
                 }
             }
-        }
-    }
-
-    post {
-        always {
-            sh "docker logout"
         }
     }
 }
