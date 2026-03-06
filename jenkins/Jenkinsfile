@@ -44,7 +44,7 @@ pipeline {
         // --------------------------------------------------------
         stage('Deploy') {
             // Replace this with the exact name of your new node
-            agent { label 'jenkins-agent' } 
+            agent { label 'dev-server' } 
             
             steps {
                 withCredentials([usernamePassword(
